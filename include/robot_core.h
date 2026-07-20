@@ -6,7 +6,7 @@
 #include "wheel_pid.h"
 #include "tb6612.h"
 #include "as5600_encoder.h"
-#include <Adafruit_MPU6050.h>
+#include "mpu6500.h" // Bolder Flight
 
 class LidarinoRobot {
 public:
@@ -32,11 +32,16 @@ public:
         encoderR.begin(PIN_I2C1_SDA, PIN_I2C1_SCL);
 
         // IMU
-        imu_ok_ = mpu.begin(MPU6050_I2C_ADDR, &Wire, 0);
-        if (imu_ok_) {
-            mpu.setAccelerometerRange(MPU6050_RANGE_2_G);
-            mpu.setGyroRange(MPU6050_RANGE_250_DEG);
-            mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+        mpu.Config(&Wire, bfs::Mpu6500::I2C_ADDR_PRIM);
+        imu_ok_ = mpu.Begin();
+        if (!imu_ok_) {
+            Serial.println("Error initializing IMU!");
+            while (1) { delay(1000); }
+            // mpu.setAccelerometerRange(MPU6050_RANGE_2_G);
+            // mpu.setGyroRange(MPU6050_RANGE_250_DEG);
+            // mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+        } else {
+            mpu.ConfigSrd(19); // Output data rate = 1000 / (1 + Srd) = 50 Hz
         }
 
         uint32_t now = millis();
@@ -94,13 +99,15 @@ private:
     TB6612Motor motorR;
     WheelPID pidL;
     WheelPID pidR;
-    Adafruit_MPU6050 mpu;
+    bfs::Mpu6500 mpu;
 
     bool imu_ok_ = false;
 
     float target_vel_l = 0.0f, target_vel_r = 0.0f;
     float meas_vel_l = 0.0f, meas_vel_r = 0.0f;
     int32_t pos_left = 0, pos_right = 0;
+    float acc_x, acc_y, acc_z;
+    float gyro_x, gyro_y, gyro_z;
 
     uint32_t last_cmd_time = 0, last_pid_time = 0, last_tlm_time = 0;
 
@@ -141,18 +148,40 @@ private:
         if (encoderR.isOk()) tp.status_flags |= STATUS_BIT_ENCODER_R_OK;
         if (imu_ok_) tp.status_flags |= STATUS_BIT_IMU_OK;
 
-        sensor_event_t a, g, temp;
-        mpu.getEvent(&a, &g, &temp);
-        tp.accel_x = (int16_t)(a.acceleration.x * 1000);
-        tp.accel_y = (int16_t)(a.acceleration.y * 1000);
-        tp.accel_z = (int16_t)(a.acceleration.z * 1000);
-        tp.gyro_x = (int16_t)(g.gyro.x * 1000);
-        tp.gyro_y = (int16_t)(g.gyro.y * 1000);
-        tp.gyro_z = (int16_t)(g.gyro.z * 1000);
+        updateIMU();
+        tp.accel_x = (int16_t)(acc_x * 1000.0f);
+        tp.accel_y = (int16_t)(acc_y * 1000.0f);
+        tp.accel_z = (int16_t)(acc_z * 1000.0f);
+        tp.gyro_x = (int16_t)(gyro_x * 1000.0f);
+        tp.gyro_y = (int16_t)(gyro_y * 1000.0f);
+        tp.gyro_z = (int16_t)(gyro_z * 1000.0f);
+
+        // sensor_event_t a, g, temp;
+        // mpu.getEvent(&a, &g, &temp);
+        // tp.accel_x = (int16_t)(a.acceleration.x * 1000);
+        // tp.accel_y = (int16_t)(a.acceleration.y * 1000);
+        // tp.accel_z = (int16_t)(a.acceleration.z * 1000);
+        // tp.gyro_x = (int16_t)(g.gyro.x * 1000);
+        // tp.gyro_y = (int16_t)(g.gyro.y * 1000);
+        // tp.gyro_z = (int16_t)(g.gyro.z * 1000);
 
         tp.checksum = compute_checksum((uint8_t*)&tp, TELEMETRY_PACKET_SIZE - 2);
         tp.terminator = 0x0D;
 
         Serial.write((uint8_t*)&tp, TELEMETRY_PACKET_SIZE);
+    }
+
+    void updateIMU() {
+        if (mpu.Read()) {
+            // Estrazione dati accelerometro (in m/s^2)
+            acc_x = mpu.accel_x_mps2();
+            acc_y = mpu.accel_y_mps2();
+            acc_z = mpu.accel_z_mps2();
+            
+            // Estrazione dati giroscopio (in rad/s)
+            gyro_x = mpu.gyro_x_radps();
+            gyro_y = mpu.gyro_y_radps();
+            gyro_z = mpu.gyro_z_radps();
+        }
     }
 };
