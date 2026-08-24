@@ -9,7 +9,7 @@ It controls the drivetrain, reads the wheel encoders, streams IMU telemetry, and
 - Drives two DC motors through a TB6612FNG motor driver.
 - Reads two AS5600 magnetic encoders on separate I2C buses.
 - Uses a PID loop to regulate left and right wheel velocity.
-- Reads an MPU6050 IMU and includes accel/gyro data in telemetry.
+- Reads an MPU6500 IMU and includes accel/gyro data in telemetry.
 - Accepts binary velocity commands from the Orange Pi.
 - Sends periodic telemetry back with wheel position, status flags, and IMU readings.
 - Stops the motors automatically on command timeout or estop.
@@ -31,7 +31,7 @@ Designed around:
 - ESP32-S3 DevKitC-1 N16R8V
 - TB6612FNG dual motor driver
 - Two AS5600 encoders, each on its own I2C bus
-- MPU6050 IMU
+- MPU6500 IMU
 - Orange Pi 4 Pro as the high-level controller
 
 ## Pinout
