@@ -5,24 +5,24 @@
 // GPIO0, 19, 20, 45, 46 evitati: strapping pins / USB nativo riservati.
 // ─────────────────────────────────────────────────────────────
 
-// Motore sinistro (TB6612FNG canale A)
+// Motore destro (TB6612FNG canale A)
 #define PIN_MOTOR_L_PWM   4
 #define PIN_MOTOR_L_IN1   5
 #define PIN_MOTOR_L_IN2   6
 
-// Motore destro (TB6612FNG canale B)
-#define PIN_MOTOR_R_PWM   7
-#define PIN_MOTOR_R_IN1   15
-#define PIN_MOTOR_R_IN2   16
+// Motore sinistro (TB6612FNG canale B)
+#define PIN_MOTOR_R_PWM   37
+#define PIN_MOTOR_R_IN1   35
+#define PIN_MOTOR_R_IN2   36
 
 // Standby condiviso TB6612FNG (LOW = motori disabilitati, sicurezza)
-#define PIN_MOTOR_STBY    17
+#define PIN_MOTOR_STBY    7
 
-// I2C bus 0 — encoder AS5600 sinistro
+// I2C bus 0 — encoder AS5600 destro
 #define PIN_I2C0_SDA      8
 #define PIN_I2C0_SCL      9
 
-// I2C bus 1 — encoder AS5600 destro
+// I2C bus 1 — encoder AS5600 sinistro
 #define PIN_I2C1_SDA      10
 #define PIN_I2C1_SCL      11
 
@@ -31,7 +31,7 @@
 #define PIN_UART_RX       44
 
 // Sicurezza
-#define PIN_WATCHDOG_LED  2     // lampeggia mentre il loop gira correttamente
+#define PIN_WATCHDOG_LED  48     // lampeggia mentre il loop gira correttamente
 #define PIN_ESTOP         12    // letto come stato (NON è la sicurezza primaria,
                                 // quella è il taglio elettrico fisico sul pulsante)
 

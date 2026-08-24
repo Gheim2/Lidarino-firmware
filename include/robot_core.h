@@ -7,6 +7,7 @@
 #include "tb6612.h"
 #include "as5600_encoder.h"
 #include "mpu6500.h" // Bolder Flight
+#include <Adafruit_NeoPixel.h>
 
 class LidarinoRobot {
 public:
@@ -15,7 +16,8 @@ public:
           motorL(PIN_MOTOR_L_PWM, PIN_MOTOR_L_IN1, PIN_MOTOR_L_IN2),
           motorR(PIN_MOTOR_R_PWM, PIN_MOTOR_R_IN1, PIN_MOTOR_R_IN2),
           pidL(0.5f, 5.0f, 0.01f, 1.0f),
-          pidR(0.5f, 5.0f, 0.01f, 1.0f) {}
+          pidR(0.5f, 5.0f, 0.01f, 1.0f),
+          statusLed(1, PIN_WATCHDOG_LED, NEO_GRB + NEO_KHZ800) {}
 
     void begin() {
         Serial.begin(115200);
@@ -30,6 +32,12 @@ public:
         // Encoder
         encoderL.begin(PIN_I2C0_SDA, PIN_I2C0_SCL);
         encoderR.begin(PIN_I2C1_SDA, PIN_I2C1_SCL);
+
+        // LED di stato
+        statusLed.begin();
+        statusLed.setBrightness(30); // Usa una luminosità bassa, i neopixel accecano!
+        statusLed.setPixelColor(0, statusLed.Color(0, 0, 255)); // Blu durante il setup
+        statusLed.show();
 
         // IMU
         mpu.Config(&Wire, bfs::Mpu6500::I2C_ADDR_PRIM);
@@ -90,9 +98,14 @@ public:
             last_tlm_time = now;
             sendTelemetry();
         }
+        updateLedStatus(now);
     }
 
 private:
+    Adafruit_NeoPixel statusLed;
+    uint32_t last_led_blink = 0;
+    bool led_state = false;
+    uint32_t blink_interval = 1000; // ms
     AS5600Encoder encoderL;
     AS5600Encoder encoderR;
     TB6612Motor motorL;
@@ -113,6 +126,35 @@ private:
 
     uint8_t serial_buf[COMMAND_PACKET_SIZE];
     uint8_t serial_idx = 0;
+
+    void updateLedStatus(uint32_t now) {
+        if (now - last_led_blink >= blink_interval) {
+            last_led_blink = now;
+            led_state = !led_state;
+
+            if (digitalRead(PIN_ESTOP) == LOW) {
+                // Emergenza premuta: Rosso
+                statusLed.setPixelColor(0, led_state ? statusLed.Color(255, 0, 0) : statusLed.Color(50, 0, 0));
+            }
+            else if (!encoderL.isOk() || !encoderR.isOk()) {
+                // Encoder non ok: Giallo lampeggiante
+                statusLed.setPixelColor(0, led_state ? statusLed.Color(255, 255, 0) : statusLed.Color(0, 0, 0));
+            }
+            else if (!imu_ok_) {
+                // IMU non ok: Viola lampeggiante
+                statusLed.setPixelColor(0, led_state ? statusLed.Color(128, 0, 128) : statusLed.Color(0, 0, 0));
+            }
+            else if (now - last_cmd_time > COMMAND_TIMEOUT_MS) {
+                // Timeout Seriale: Arancione lampeggiante
+                statusLed.setPixelColor(0, led_state ? statusLed.Color(255, 100, 0) : statusLed.Color(0, 0, 0));
+            }
+            else {
+                // Tutto ok: Verde
+                statusLed.setPixelColor(0, led_state ? statusLed.Color(0, 255, 0) : statusLed.Color(0, 50, 0));
+            }
+            statusLed.show();
+        }
+    }
 
     void processSerial() {
         while (Serial.available() > 0) {
