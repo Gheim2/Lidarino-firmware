@@ -40,15 +40,16 @@ The pin mapping is defined in `include/pins.h`.
 
 Important assignments:
 
-- Left motor PWM: GPIO 4
-- Left motor IN1/IN2: GPIO 5 / 6
-- Right motor PWM: GPIO 7
-- Right motor IN1/IN2: GPIO 15 / 16
-- TB6612 standby: GPIO 17
-- Left encoder I2C: GPIO 8 / 9
-- Right encoder I2C: GPIO 10 / 11
+- Right motor A PWM: GPIO 4
+- Right motor A IN1/IN2: GPIO 5 / 6
+- Left motor B PWM: GPIO 37
+- Left motor B IN1/IN2: GPIO 35 / 36
+- TB6612 standby: GPIO 7
+- Right encoder I2C: GPIO 8 / 9
+- Left encoder I2C: GPIO 10 / 11
 - Estop input: GPIO 12
-- UART to Orange Pi: GPIO 43 / 44
+- Watchdog Led: GPIO 48
+- UART to Orange Pi (TX/RX): GPIO 43 / 44
 
 ## Serial protocol
 
