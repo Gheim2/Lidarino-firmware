@@ -41,7 +41,7 @@ struct CommandPacket {
 // AS5600 = 4096 tick/giro, ma qui è già un contatore esteso oltre
 // i 4096 per gestire giri multipli — calcolato lato firmware).
 //
-// Dimensione totale pacchetto: 25 byte
+// Dimensione totale pacchetto: 27 byte
 #pragma pack(push, 1)
 struct TelemetryPacket {
     uint8_t  sync0;        // 0xAA
@@ -57,11 +57,12 @@ struct TelemetryPacket {
     int16_t  gyro_z;
 
     uint8_t  status_flags; // bit0: estop attivo, bit1: encoder_L ok, bit2: encoder_R ok, bit3: IMU ok
+    uint16_t battery_mv;   // tensione batteria in mV (lettura analogica tramite partitore resistivo)
     uint8_t  checksum;     // XOR di tutti i byte precedenti
     uint8_t  terminator;   // 0x0D
 };
 #pragma pack(pop)
-#define TELEMETRY_PACKET_SIZE sizeof(TelemetryPacket)  // 25 byte
+#define TELEMETRY_PACKET_SIZE sizeof(TelemetryPacket)  // 27 byte
 
 // Bit del campo status_flags
 #define STATUS_BIT_ESTOP        (1 << 0)
