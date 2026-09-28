@@ -5,8 +5,6 @@
 #include "serial_protocol.h"
 #include "wheel_pid.h"
 #include "tb6612.h"
-// #include <TB6612_ESP32.h> // TB6612FNG driver per ESP32
-// #include "as5600_encoder.h"
 #include "user_config.h"
 #include <AS5600.h>
 #include "mpu6500.h" // Bolder Flight
@@ -16,13 +14,11 @@ class LidarinoRobot
 {
 public:
     LidarinoRobot()
-        : encoderL(&Wire), encoderR(&Wire1),
-          motorL(PIN_MOTOR_L_PWM, PIN_MOTOR_L_IN1, PIN_MOTOR_L_IN2, 0),
+        : encoderR(&Wire), encoderL(&Wire1),
+          motorL(PIN_MOTOR_L_PWM, PIN_MOTOR_L_IN2, PIN_MOTOR_L_IN1, 0),
           motorR(PIN_MOTOR_R_PWM, PIN_MOTOR_R_IN1, PIN_MOTOR_R_IN2, 1),
-          // motorL(PIN_MOTOR_L_IN1, PIN_MOTOR_L_IN2, PIN_MOTOR_L_PWM, 1, PIN_MOTOR_STBY, 5000, 10, 1),
-          // motorR(PIN_MOTOR_R_IN1, PIN_MOTOR_R_IN2, PIN_MOTOR_R_PWM, 1, PIN_MOTOR_STBY, 5000, 10, 2),
-          pidL(0.02f, 0.1f, 0.0f, 0.5f),
-          pidR(0.02f, 0.1f, 0.0f, 0.5f),
+          pidL(0.12f, 0.05f, 0.0f, 0.8f),
+          pidR(0.12f, 0.05f, 0.0f, 0.8f),
           statusLed(1, PIN_WATCHDOG_LED, NEO_GRB + NEO_KHZ800)
     {
     }
@@ -44,80 +40,41 @@ public:
         digitalWrite(PIN_MOTOR_STBY, HIGH);
         pinMode(PIN_ESTOP, INPUT_PULLUP);
 
-        // Encoder
-        if (!encoderL.begin())
-        {
-            while (1)
-            {
-                delay(1000);
-                Serial.println("Error initializing left encoder!");
-                checkEncoderDiagnostics();
-            }
-        }
-        if (!encoderR.begin())
-        {
-            while (1)
-            {
-                delay(1000);
-                Serial.println("Error initializing right encoder!");
-                checkEncoderDiagnostics();
-            }
-        }
-        encoderL.setDirection(AS5600_CLOCK_WISE);
-        encoderR.setDirection(AS5600_CLOCK_WISE);
-
-        // Resetta la posizione cumulativa iniziale a 0
-        encoderL.resetCumulativePosition(0);
-        encoderR.resetCumulativePosition(0);
-
         // LED di stato
         statusLed.begin();
         statusLed.setBrightness(30);                            // Usa una luminosità bassa, i neopixel accecano!
         statusLed.setPixelColor(0, statusLed.Color(0, 0, 255)); // Blu durante il setup
         statusLed.show();
 
-        // // IMU
-        // Serial.println("[DEBUG] Inizio test IMU passo-passo...");
+        // Encoder
+        while (!encoderR.begin())
+        {
+            delay(1000);
+            Serial.println("Error initializing right encoder!");
+            checkEncoderDiagnostics();
+        }
+        while (!encoderL.begin())
+        {
+            delay(1000);
+            Serial.println("Error initializing left encoder!");
+            checkEncoderDiagnostics();
+        }
+        encoderL.setDirection(AS5600_COUNTERCLOCK_WISE);
+        encoderR.setDirection(AS5600_CLOCK_WISE);
 
-        // // 1. Test di presenza sul bus (WHO_AM_I)
-        // Wire.beginTransmission(0x68); // Indirizzo I2C standard MPU6500
-        // byte error = Wire.endTransmission();
-        // if (error != 0) {
-        //     Serial.print("[DEBUG ERRORE] IMU non trovata sul bus! Errore I2C: ");
-        //     Serial.println(error);
-        // } else {
-        //     Serial.println("[DEBUG OK] IMU risponde all'indirizzo I2C.");
-        // }
+        // Resetta la posizione cumulativa iniziale a 0
+        encoderL.resetCumulativePosition(0);
+        encoderR.resetCumulativePosition(0);
 
-        // // 2. Lettura del registro WHO_AM_I (dovrebbe restituire 0x70 o simile per MPU6500)
-        // Wire.beginTransmission(0x68);
-        // Wire.write(0x75); // Indirizzo del registro WHO_AM_I
-        // Wire.endTransmission(false); // Repeated start
-        // Wire.requestFrom(0x68, 1);
-        // if (Wire.available()) {
-        //     uint8_t whoami = Wire.read();
-        //     Serial.print("[DEBUG] Registro WHO_AM_I letto: 0x");
-        //     Serial.println(whoami, HEX);
-        // } else {
-        //     Serial.println("[DEBUG ERRORE] Impossibile leggere il registro WHO_AM_I dell'IMU!");
-        // }
-
-        // 3. Ora proviamo l'avvio ufficiale della libreria
         mpu.Config(&Wire, bfs::Mpu6500::I2C_ADDR_PRIM);
         imu_ok_ = mpu.Begin();
         // mpu.Config(&Wire, bfs::Mpu6500::I2C_ADDR_PRIM);
-        if (!imu_ok_)
+        while (!imu_ok_)
         {
-            while (1)
-            {
                 Serial.println("Error initializing IMU!");
                 delay(1000);
-            }
         }
-        else
-        {
-            mpu.ConfigSrd(19); // Output data rate = 1000 / (1 + Srd) = 50 Hz
-        }
+        mpu.ConfigSrd(19); // Output data rate = 1000 / (1 + Srd) = 50 Hz
 
         uint32_t now = millis();
         last_cmd_time = now;
@@ -146,46 +103,56 @@ public:
             float dt_sec = (now - last_pid_time) / 1000.0f;
             last_pid_time = now;
 
-            // Aggiorna posizioni interne
-            // encoderL.update();
-            // encoderR.update();
-
-            // Legge posizioni cumulative
-            // int32_t new_pos_l = encoderL.getPositionTicks();
-            // int32_t new_pos_r = encoderR.getPositionTicks();
-            // Legge le posizioni cumulative native della libreria
             int32_t new_pos_l = encoderL.getCumulativePosition();
             int32_t new_pos_r = encoderR.getCumulativePosition();
 
+            const float alpha = 0.15f; // Fattore di smoothing per il filtro passa basso
+
             // Calcola velocità istantanea per il PID
-            meas_vel_l = ((float)(new_pos_l - pos_left) / AS5600_TICKS_PER_REV) * TWO_PI / dt_sec;
-            meas_vel_r = ((float)(new_pos_r - pos_right) / AS5600_TICKS_PER_REV) * TWO_PI / dt_sec;
+            float raw_vel_l = ((float)(new_pos_l - pos_left) / AS5600_TICKS_PER_REV) * TWO_PI / dt_sec;
+            float raw_vel_r = ((float)(new_pos_r - pos_right) / AS5600_TICKS_PER_REV) * TWO_PI / dt_sec;
+
+            // Applica filtro passa basso
+            filtered_vel_l = alpha * raw_vel_l + (1.0f - alpha) * filtered_vel_l;
+            filtered_vel_r = alpha * raw_vel_r + (1.0f - alpha) * filtered_vel_r;
+
+            meas_vel_l = filtered_vel_l;
+            meas_vel_r = filtered_vel_r;
+
+            #if DEBUG_MODE
+            if (target_vel_l != 0.0f || target_vel_r != 0.0f) {
+                // Formato per Serial Plotter: "Etichetta:Valore, Etichetta:Valore"
+                Serial.print("Target_L:"); Serial.print(target_vel_l);
+                Serial.print(", Meas_L:"); Serial.print(meas_vel_l);
+                Serial.print(", Target_R:"); Serial.print(target_vel_r);
+                Serial.print(", Meas_R:"); Serial.println(meas_vel_r);
+            }
+            #endif
 
             pos_left = new_pos_l;
             pos_right = new_pos_r;
 
-            // Applica PID ai driver
-            float outL = pidL.compute(target_vel_l, meas_vel_l, dt_sec);
-            float outR = pidR.compute(target_vel_r, meas_vel_r, dt_sec);
-            motorL.setCommand(outL);
-            motorR.setCommand(outR);
-            // Serial.print("TargetL: ");
-            // Serial.print(target_vel_l);
-            // Serial.print(" | MeasL: ");
-            // Serial.print(meas_vel_l);
-            // Serial.print(" | OutL: ");
-            // Serial.println(outL);
-            // Serial.print("TargetR: ");
-            // Serial.print(target_vel_r);
-            // Serial.print(" | MeasR: ");
-            // Serial.print(meas_vel_r);
-            // Serial.print(" | OutR: ");
-            // Serial.println(outR);
-            // Serial.println("----");
-            // motorL.drive(0.5f * 1023.0f, 1000);
-            // motorR.drive(0.5f * 1023.0f, 2000);
-            // motorL.setCommand(0.0f);
-            // motorR.setCommand(0.0f);
+            // Applica PID ai driver solo se c'è un target di velocità
+            float outL = 0.0f;
+            float outR = 0.0f;
+            if (!manual_pwm) {
+                if (target_vel_l != 0.0f) {
+                    outL = pidL.compute(target_vel_l, meas_vel_l, dt_sec);
+                } else {
+                    pidL.reset(); // Reset del PID se il target è 0, per evitare accumulo di errore integrale    
+                    outL = 0.0f; // Assicura che il comando al motore sia 0
+                }
+    
+                if (target_vel_r != 0.0f) {
+                    outR = pidR.compute(target_vel_r, meas_vel_r, dt_sec);
+                } else {
+                    pidR.reset(); // Reset del PID se il target è 0, per evitare accumulo di errore integrale    
+                    outR = 0.0f; // Assicura che il comando al motore sia 0
+                }
+    
+                motorL.setCommand(outL);
+                motorR.setCommand(outR);
+            }
         }
 
         // 4. Telemetria a 50 Hz
@@ -231,9 +198,11 @@ private:
     uint32_t last_battery_time = 0;
 
     bool imu_ok_ = false;
+    bool manual_pwm = false;
 
     float target_vel_l = 0.0f, target_vel_r = 0.0f;
     float meas_vel_l = 0.0f, meas_vel_r = 0.0f;
+    float filtered_vel_l = 0.0f, filtered_vel_r = 0.0f;
     int32_t pos_left = 0, pos_right = 0;
     float acc_x, acc_y, acc_z;
     float gyro_x, gyro_y, gyro_z;
@@ -283,6 +252,7 @@ private:
             else if (now - last_cmd_time > COMMAND_TIMEOUT_MS)
             {
                 // Timeout Seriale: Arancione lampeggiante
+                DEBUG_PRINTLN("[WARN] Timeout seriale: nessun comando ricevuto da " + String(COMMAND_TIMEOUT_MS) + " ms!");
                 statusLed.setPixelColor(0, led_state ? statusLed.Color(255, 100, 0) : statusLed.Color(0, 0, 0));
             }
             else
@@ -297,6 +267,77 @@ private:
 
     void processSerial()
     {
+        #if DEBUG_MODE
+        // --- MODALITÀ DEBUG: MENU INTERATTIVO ASCII ---
+        while (Serial.available() > 0)
+        {
+            char c = Serial.read();
+            if (c == '\n' || c == '\r') continue; // Ignora gli a capo
+
+            switch (c)
+            {
+                case 'w': // Avanti entrambi (PID)
+                    manual_pwm = false;
+                    target_vel_l = 10.0f; target_vel_r = 10.0f;
+                    DEBUG_PRINTLN("[DEBUG] Comando: AVANTI");
+                    break;
+                case 's': // Stop
+                    manual_pwm = false;
+                    target_vel_l = 0.0f; target_vel_r = 0.0f;
+                    DEBUG_PRINTLN("[DEBUG] Comando: STOP");
+                    break;
+                case '1': // Solo motore sinistro (PID)
+                    manual_pwm = false;
+                    target_vel_l = 10.0f; target_vel_r = 0.0f;
+                    DEBUG_PRINTLN("[DEBUG] Comando: TEST MOTORE SINISTRO");
+                    break;
+                case '2': // Solo motore destro (PID)
+                    manual_pwm = false;
+                    target_vel_l = 0.0f; target_vel_r = 10.0f;
+                    DEBUG_PRINTLN("[DEBUG] Comando: TEST MOTORE DESTRO");
+                    break;
+                case 'q': // Test PWM grezzo Sinistro (Bypassa PID)
+                    manual_pwm = true;
+                    target_vel_l = 0.0f; target_vel_r = 0.0f;
+                    motorL.setCommand(0.5f); // 50% duty cycle
+                    motorR.setCommand(0.0f);
+                    DEBUG_PRINTLN("[DEBUG] Comando: RAW PWM SINISTRO 50%");
+                    break;
+                case 'e': // Test PWM grezzo Destro (Bypassa PID)
+                    manual_pwm = true;
+                    target_vel_l = 0.0f; target_vel_r = 0.0f;
+                    motorL.setCommand(0.0f);
+                    motorR.setCommand(0.5f); // 50% duty cycle
+                    DEBUG_PRINTLN("[DEBUG] Comando: RAW PWM DESTRO 50%");
+                    break;
+                case 'u': // Aumenta Kp di 0.01
+                    pidL.setTunings(pidL.getKp() + 0.01f, pidL.getKi(), 0.0f);
+                    pidR.setTunings(pidR.getKp() + 0.01f, pidR.getKi(), 0.0f);
+                    DEBUG_PRINT("[DEBUG] Nuovo Kp: "); DEBUG_PRINTLN(pidL.getKp());
+                    break;
+                case 'j': // Riduci Kp di 0.01
+                    if (pidL.getKp() > 0.01f) pidL.setTunings(pidL.getKp() - 0.01f, pidL.getKi(), 0.0f);
+                    if (pidR.getKp() > 0.01f) pidR.setTunings(pidR.getKp() - 0.01f, pidR.getKi(), 0.0f);
+                    DEBUG_PRINT("[DEBUG] Nuovo Kp: "); DEBUG_PRINTLN(pidL.getKp());
+                    break;
+                case 'i': // Aumenta Ki di 0.01
+                    pidL.setTunings(pidL.getKp(), pidL.getKi() + 0.01f, 0.0f);
+                    pidR.setTunings(pidR.getKp(), pidR.getKi() + 0.01f, 0.0f);
+                    DEBUG_PRINT("[DEBUG] Nuovo Ki: "); DEBUG_PRINTLN(pidL.getKi());
+                    break;
+                case 'k': // Riduci Ki di 0.01
+                    if (pidL.getKi() > 0.0f) pidL.setTunings(pidL.getKp(), pidL.getKi() - 0.01f, 0.0f);
+                    if (pidR.getKi() > 0.0f) pidR.setTunings(pidR.getKp(), pidR.getKi() - 0.01f, 0.0f);
+                    DEBUG_PRINT("[DEBUG] Nuovo Ki: "); DEBUG_PRINTLN(pidL.getKi());
+                    break;
+                default:
+                    DEBUG_PRINTLN("Menu: [w] Avanti, [s] Stop, [1] Solo SX, [2] Solo DX, [q] Raw PWM SX, [e] Raw PWM DX");
+                    break;
+            }
+            last_cmd_time = millis(); // Aggiorna il timeout di sicurezza
+        }
+        #else
+        // --- MODALITÀ OPERATIVA: PROTOCOLLO BINARIO ---
         while (Serial.available() > 0)
         {
             serial_buf[serial_idx++] = Serial.read();
@@ -319,6 +360,7 @@ private:
                 serial_idx--;
             }
         }
+        #endif
     }
 
     void sendTelemetry()
@@ -350,15 +392,6 @@ private:
         tp.gyro_y = (int16_t)(gyro_y * 1000.0f);
         tp.gyro_z = (int16_t)(gyro_z * 1000.0f);
 
-        // sensor_event_t a, g, temp;
-        // mpu.getEvent(&a, &g, &temp);
-        // tp.accel_x = (int16_t)(a.acceleration.x * 1000);
-        // tp.accel_y = (int16_t)(a.acceleration.y * 1000);
-        // tp.accel_z = (int16_t)(a.acceleration.z * 1000);
-        // tp.gyro_x = (int16_t)(g.gyro.x * 1000);
-        // tp.gyro_y = (int16_t)(g.gyro.y * 1000);
-        // tp.gyro_z = (int16_t)(g.gyro.z * 1000);
-
         tp.battery_mv = current_battery_mv;
         tp.checksum = compute_checksum((uint8_t *)&tp, TELEMETRY_PACKET_SIZE - 2);
         tp.terminator = 0x0D;
@@ -388,17 +421,17 @@ private:
         // 1. Verifica la presenza e la distanza del magnete
         if (!encoderL.magnetDetected())
         {
-            Serial.println("[WARN] Encoder L: Nessun magnete rilevato!");
+            DEBUG_PRINTLN("[WARN] Encoder L: Nessun magnete rilevato!");
         }
         else
         {
             if (encoderL.magnetTooStrong())
             {
-                Serial.println("[WARN] Encoder L: Magnete TROPPO VICINO (troppo forte)");
+                DEBUG_PRINTLN("[WARN] Encoder L: Magnete TROPPO VICINO (troppo forte)");
             }
             if (encoderL.magnetTooWeak())
             {
-                Serial.println("[WARN] Encoder L: Magnete TROPPO LONTANO (troppo debole)");
+                DEBUG_PRINTLN("[WARN] Encoder L: Magnete TROPPO LONTANO (troppo debole)");
             }
         }
 
@@ -406,8 +439,8 @@ private:
         int err = encoderL.lastError();
         if (err != 0)
         {
-            Serial.print("[ERROR] Encoder L errore I2C codice: ");
-            Serial.println(err);
+            DEBUG_PRINT("[ERROR] Encoder L errore I2C codice: ");
+            DEBUG_PRINTLN(err);
         }
     }
 
@@ -418,12 +451,12 @@ private:
         byte error = Wire.endTransmission();
         if (error != 0)
         {
-            Serial.print("[ERROR] IMU non trovata sul bus! Errore I2C: ");
-            Serial.println(error);
+            DEBUG_PRINT("[ERROR] IMU non trovata sul bus! Errore I2C: ");
+            DEBUG_PRINTLN(error);
         }
         else
         {
-            Serial.println("[INFO] IMU risponde all'indirizzo I2C.");
+            DEBUG_PRINTLN("[INFO] IMU risponde all'indirizzo I2C.");
         }
 
         // 2. Lettura del registro WHO_AM_I
@@ -434,12 +467,12 @@ private:
         if (Wire.available())
         {
             uint8_t whoami = Wire.read();
-            Serial.print("[INFO] Registro WHO_AM_I letto: 0x");
+            DEBUG_PRINT("[INFO] Registro WHO_AM_I letto: 0x");
             Serial.println(whoami, HEX);
         }
         else
         {
-            Serial.println("[ERROR] Impossibile leggere il registro WHO_AM_I dell'IMU!");
+            DEBUG_PRINTLN("[ERROR] Impossibile leggere il registro WHO_AM_I dell'IMU!");
         }
     }
 };

@@ -44,6 +44,16 @@ public:
         first_run_ = true;
     }
 
+    void setTunings(float kp, float ki, float kd) {
+        kp_ = kp;
+        ki_ = ki;
+        kd_ = kd;
+    }
+
+    float getKp() { return kp_; }
+    float getKi() { return ki_; }
+    float getKd() { return kd_; }
+
 private:
     float kp_, ki_, kd_;
     float output_limit_;

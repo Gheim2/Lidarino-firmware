@@ -73,10 +73,6 @@ struct TelemetryPacket {
 // Risoluzione AS5600: 12 bit -> 4096 tick per giro meccanico del sensore
 #define AS5600_TICKS_PER_REV  4096
 
-// Timeout di sicurezza: se l'ESP32 non riceve un CommandPacket valido
-// entro questo intervallo, ferma i motori autonomamente.
-#define COMMAND_TIMEOUT_MS    300
-
 // Frequenza di invio telemetria (Hz)
 #define TELEMETRY_RATE_HZ     50
 
