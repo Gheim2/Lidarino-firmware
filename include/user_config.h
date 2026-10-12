@@ -2,6 +2,7 @@
 #define USER_CONFIG_H
 
 #define DEBUG_MODE 0 // 1 = Abilita messaggi di debug e disabilita la trasmissione di pacchetti del serial protocol, 0 = Disabilita messaggi di debug
+#define BATTERY_MV_THRESHOLD 10000
 
 #if DEBUG_MODE
     #define DEBUG_PRINT(x) Serial.print(x)

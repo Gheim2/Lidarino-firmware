@@ -9,6 +9,9 @@
 #include <AS5600.h>
 #include "mpu6500.h" // Bolder Flight
 #include <Adafruit_NeoPixel.h>
+#include <esp_task_wdt.h>
+
+constexpr uint32_t UPDATE_WATCHDOG_TIMEOUT_S = 3;
 
 class LidarinoRobot
 {
@@ -17,8 +20,8 @@ public:
         : encoderR(&Wire), encoderL(&Wire1),
           motorL(PIN_MOTOR_L_PWM, PIN_MOTOR_L_IN2, PIN_MOTOR_L_IN1, 0),
           motorR(PIN_MOTOR_R_PWM, PIN_MOTOR_R_IN1, PIN_MOTOR_R_IN2, 1),
-          pidL(0.12f, 0.05f, 0.0f, 0.8f),
-          pidR(0.12f, 0.05f, 0.0f, 0.8f),
+          pidL(0.11f, 0.05f, 0.0f, 0.8f),
+          pidR(0.11f, 0.05f, 0.0f, 0.8f),
           statusLed(1, PIN_WATCHDOG_LED, NEO_GRB + NEO_KHZ800)
     {
     }
@@ -76,6 +79,9 @@ public:
         }
         mpu.ConfigSrd(19); // Output data rate = 1000 / (1 + Srd) = 50 Hz
 
+        esp_task_wdt_init(UPDATE_WATCHDOG_TIMEOUT_S, true);
+        esp_task_wdt_add(NULL);
+
         uint32_t now = millis();
         last_cmd_time = now;
         last_pid_time = now;
@@ -84,6 +90,7 @@ public:
 
     void update()
     {
+        esp_task_wdt_reset();
         uint32_t now = millis();
 
         // 1. Seriale asincrona
@@ -227,9 +234,9 @@ private:
                 // Emergenza premuta: Rosso
                 statusLed.setPixelColor(0, led_state ? statusLed.Color(255, 0, 0) : statusLed.Color(50, 0, 0));
             }
-            else if (current_battery_mv <= 9800)
+            else if (current_battery_mv <= BATTERY_MV_THRESHOLD)
             {
-                // Batteria scarica (<= 9.8V): Magenta lampeggiante veloce
+                // Batteria scarica (<= BATTERY_MV_THRESHOLD): Magenta lampeggiante veloce
                 statusLed.setPixelColor(0, led_state ? statusLed.Color(255, 0, 255) : statusLed.Color(0, 0, 0));
                 blink_interval = 250;
             }

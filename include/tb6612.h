@@ -12,12 +12,12 @@ public:
         pinMode(in2_pin_, OUTPUT);
 
         // API aggiornata per ESP32 Core 3.x+ (PlatformIO recente)
-        // 5kHz. 10 bit = 1024 step di risoluzione.
+        // 10kHz. 12 bit = 4096 step di risoluzione.
         #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-            ledcAttach(pwm_pin_, 5000, 10);
+            ledcAttach(pwm_pin_, 10000, 12);
         #else
             // Fallback per vecchie versioni del core ESP32
-            ledcSetup(pwm_channel_, 5000, 10);
+            ledcSetup(pwm_channel_, 10000, 12);
             ledcAttachPin(pwm_pin_, pwm_channel_);
         #endif
 
@@ -41,7 +41,7 @@ public:
             digitalWrite(in2_pin_, LOW);
         }
 
-        uint32_t duty = (uint32_t)(fabs(command) * 1023.0f);
+        uint32_t duty = (uint32_t)(fabs(command) * 4095.0f);
         
         #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
             ledcWrite(pwm_pin_, duty);
