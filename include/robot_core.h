@@ -258,9 +258,10 @@ private:
             }
             else if (now - last_cmd_time > COMMAND_TIMEOUT_MS)
             {
-                // Timeout Seriale: Arancione lampeggiante
+                // Timeout Seriale: Arancione lampeggiante alternato a Rosso
                 DEBUG_PRINTLN("[WARN] Timeout seriale: nessun comando ricevuto da " + String(COMMAND_TIMEOUT_MS) + " ms!");
-                statusLed.setPixelColor(0, led_state ? statusLed.Color(255, 100, 0) : statusLed.Color(0, 0, 0));
+                statusLed.setPixelColor(0, led_state ? statusLed.Color(255, 100, 0) : statusLed.Color(255, 0, 0));
+                
             }
             else
             {
