@@ -1,0 +1,2 @@
+# Il firmware viene sincronizzato con rsync sul Banana Pi (Linux): sempre LF, anche su Windows
+* text=auto eol=lf
