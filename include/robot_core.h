@@ -90,8 +90,10 @@ public:
 
 
         // Motori ed emergenza
-        motorL.begin();
-        motorR.begin();
+        if (!motorL.begin())
+            Serial.println("Error initializing left motor PWM!");
+        if (!motorR.begin())
+            Serial.println("Error initializing right motor PWM!");
         pinMode(PIN_MOTOR_STBY, OUTPUT);
         digitalWrite(PIN_MOTOR_STBY, HIGH);
         pinMode(PIN_ESTOP, INPUT_PULLUP);
@@ -122,14 +124,22 @@ public:
         encoderL.resetCumulativePosition(0);
         encoderR.resetCumulativePosition(0);
 
+        // L'IMU non blocca l'avvio: senza IMU motori e odometria da encoder funzionano lo stesso
+        // (LED viola, bit IMU_OK a 0 in telemetria) e il loop ritenta la configurazione
         mpu.Config(&Wire, bfs::Mpu6500::I2C_ADDR_PRIM);
-        while (!configureIMU())
+        for (uint8_t attempt = 0; attempt < IMU_SETUP_ATTEMPTS && !imu_ok_; attempt++)
         {
+            imu_ok_ = configureIMU();
+            if (!imu_ok_)
+            {
                 Serial.println("Error initializing IMU!");
-                delay(1000);
+                delay(200);
+            }
         }
-        imu_ok_ = true;
-        calibrateGyroBias();
+        if (imu_ok_)
+            calibrateGyroBias();
+        else
+            Serial.println("IMU not responding: starting without it, retrying in the loop");
 
         esp_task_wdt_init(UPDATE_WATCHDOG_TIMEOUT_S, true);
         esp_task_wdt_add(NULL);
@@ -286,6 +296,7 @@ private:
     int boot_text_len_ = 0;
     int boot_text_pos_ = 0;
     static constexpr uint8_t IMU_MAX_FAILS = 5; // 5 letture fallite consecutive a 50 Hz = 100 ms
+    static constexpr uint8_t IMU_SETUP_ATTEMPTS = 3;
     bool manual_pwm = false;
 
     float target_vel_l = 0.0f, target_vel_r = 0.0f;
@@ -568,6 +579,9 @@ private:
         {
             if (imu_fail_count_ < IMU_MAX_FAILS) imu_fail_count_++;
             if (imu_fail_count_ >= IMU_MAX_FAILS) imu_ok_ = false;
+            // Un'IMU mai configurata (assente all'avvio) o resettata da un calo di tensione
+            // non produce più dati: Read() fallirebbe per sempre senza riconfigurarla
+            if (!imu_ok_) recoverIMU();
             return;
         }
         imu_fail_count_ = 0;
@@ -591,6 +605,18 @@ private:
         gyro_x = gyro[0];   // rad/s
         gyro_y = gyro[1];
         gyro_z = gyro[2];
+    }
+
+    // Riconfigura l'IMU se è tornata a rispondere. configureIMU() blocca ~100 ms (la libreria fa
+    // delay(10) dopo ogni scrittura di registro), quindi solo a robot fermo, mai durante il controllo.
+    // imu_ok_ torna true alla prossima Read() riuscita.
+    void recoverIMU()
+    {
+        if (target_vel_l != 0.0f || target_vel_r != 0.0f) return;
+        // Probe rapido (una transazione, senza delay): se l'IMU non risponde non si prova a configurarla
+        Wire.beginTransmission(bfs::Mpu6500::I2C_ADDR_PRIM);
+        if (Wire.endTransmission() != 0) return;
+        if (configureIMU()) imu_fail_count_ = 0;
     }
 
     // Ultimo campione della libreria convertito negli assi del robot (senza calibrazione)

@@ -7,21 +7,28 @@ public:
     TB6612Motor(uint8_t pwm_pin, uint8_t in1_pin, uint8_t in2_pin, uint8_t pwm_channel = 0)
         : pwm_pin_(pwm_pin), in1_pin_(in1_pin), in2_pin_(in2_pin), pwm_channel_(pwm_channel) {}
 
-    void begin() {
+    // 9.5 kHz, 12 bit = 4096 step. Il clock LEDC è 40 MHz: con 12 bit la frequenza massima è
+    // 40 MHz / 4096 = 9.77 kHz. A 10 kHz / 12 bit ledcSetup() falliva e il PWM restava a 0.
+    static constexpr uint32_t PWM_FREQ_HZ = 9500;
+    static constexpr uint8_t PWM_RES_BITS = 12;
+    static constexpr uint32_t PWM_MAX_DUTY = (1u << PWM_RES_BITS) - 1;
+
+    // Restituisce false se il PWM non si può configurare (motore fermo)
+    bool begin() {
         pinMode(in1_pin_, OUTPUT);
         pinMode(in2_pin_, OUTPUT);
 
         // API aggiornata per ESP32 Core 3.x+ (PlatformIO recente)
-        // 10kHz. 12 bit = 4096 step di risoluzione.
         #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-            ledcAttach(pwm_pin_, 10000, 12);
+            bool ok = ledcAttach(pwm_pin_, PWM_FREQ_HZ, PWM_RES_BITS);
         #else
             // Fallback per vecchie versioni del core ESP32
-            ledcSetup(pwm_channel_, 10000, 12);
+            bool ok = ledcSetup(pwm_channel_, PWM_FREQ_HZ, PWM_RES_BITS) != 0;
             ledcAttachPin(pwm_pin_, pwm_channel_);
         #endif
 
         stop();
+        return ok;
     }
 
     // command: -1.0 (indietro pieno) ... 0.0 (fermo) ... 1.0 (avanti pieno)
@@ -41,7 +48,7 @@ public:
             digitalWrite(in2_pin_, LOW);
         }
 
-        uint32_t duty = (uint32_t)(fabs(command) * 4095.0f);
+        uint32_t duty = (uint32_t)(fabs(command) * (float)PWM_MAX_DUTY);
         
         #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
             ledcWrite(pwm_pin_, duty);
